@@ -13,9 +13,11 @@ from telegram.ext import Application, MessageHandler, filters
 from telegram.ext import CommandHandler, CallbackQueryHandler, ConversationHandler
 
 # Запускаем логгирование
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.DEBUG)
+#logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.DEBUG)
 BOT_TOKEN = '6937834872:AAFajRx8Fpk1U0QHGaH3QmroPsXdUb0qvig'
-
+connection = sqlite3.connect('vacancy.db')
+cursor = connection.cursor()
+ACCESS = False
 
 async def start_command(update, context):
     reply_txt = '''Здравствуй, пользователь! Отправь мне команду
@@ -35,56 +37,89 @@ async def begin_command(update, context):  # команда входа в диа
     return 1
 
 
-async def start_quiz(call, context):  # обработка ответа на вопрос, кем является пользователь
+async def start_quiz(call, context):  # обработка ответа на вопрос, кем является пользовательclos
     ans = call.callback_query.data
     print(ans)
+    id = call.callback_query.from_user.id
+    try:
+        ids = cursor.execute("SELECT user_id FROM vacancy").fetchall()[0]
+    except Exception as e:
+        ids = []
     if ans == 'leader':
         print('amogus')
         lead_message = '''Давай зарегестрируем твою компанию!
             Введи сначала название компании'''
-        await context.bot.send_message(call.callback_query.message.chat.id, lead_message)
+        if id not in ids:
+            cursor.execute('INSERT INTO vacancy (user_id, state) VALUES (?, ?)', (id, 1))
+            connection.commit()
+            await context.bot.send_message(call.callback_query.message.chat.id, lead_message)
 
     elif ans == 'worker':
-        work_message = 'Напиши свое ФИО'
-        await context.bot.send_message(call.callback_query.message.chat.id, work_message)
+        if id not in ids:
+            ACCESS = True
+            work_message = 'Напиши свое ФИО'
+            cursor.execute('INSERT INTO workers (user_id) VALUES (?)', (id,))
+            connection.commit()
+            await context.bot.send_message(call.callback_query.message.chat.id, work_message)
 
 
 async def boss_get_company(call, context):
     print('-------------------------------------')
     company_name = call.message.text
-    print(company_name)
-    message = '''Напиши своё ФИО'''
-    await context.bot.send_message(call.message.chat.id, message)
-    print('ВОЗВРАЩАЮ 3')
-    return 3
+    companies = cursor.execute("SELECT company_name FROM vacancy").fetchall()[0]
+    id = call.message.chat.id
+    local_company = cursor.execute('SELECT company_name FROM vacancy WHERE user_id=?', (id)).fetchall()[0]
+    if company_name not in companies:
+        cursor.execute('UPDATE vacancy SET company_name = ? WHERE user_id = ?', (company_name, id))
+        connection.commit()
+        print(company_name)
+        message = '''Напиши своё ФИО'''
+        await context.bot.send_message(call.message.chat.id, message)
+        print('ВОЗВРАЩАЮ 3')
+        return 3
 
 
 async def boss_get_name(call, context):
     print('ОБРАБОТЧИК ИМЕНИ ВЫЗВАН')
     name = call.message.text
-    message = 'Напиши город, в котором располагается компания'
-    print(name)
-    await context.bot.send_message(call.message.chat.id, message)
-    return 4
+    names = cursor.execute("SELECT name FROM vacancy").fetchall()[0]
+    id = call.message.chat.id
+    if name not in names:
+        cursor.execute('UPDATE vacancy SET name = ? WHERE user_id = ?', (name, id))
+        connection.commit()
+        message = 'Напиши город, в котором располагается компания'
+        print(name)
+        await context.bot.send_message(call.message.chat.id, message)
+        return 4
 
 
 async def boss_get_city(call, context):
     print('ОБРАБОТЧИК ГОРОДА ВЫЗВАН')
     boss_city = call.message.text
-    message = 'Напиши свой ИНН'
-    print(boss_city)
-    await context.bot.send_message(call.message.chat.id, message)
-    return 5
+    cities = cursor.execute("SELECT city FROM vacancy").fetchall()[0]
+    id = call.message.chat.id
+    if boss_city not in cities:
+        cursor.execute('UPDATE vacancy SET city = ? WHERE user_id = ?', (boss_city, id))
+        connection.commit()
+        message = 'Напиши свой ИНН'
+        print(boss_city)
+        await context.bot.send_message(call.message.chat.id, message)
+        return 5
 
 
 async def boss_get_inn(call, context):
     print('ОБРАБОТЧИК ИНН ВЫЗВАН')
     boss_inn = call.message.text
-    final_message = '''Спасибо, регистрация компании завершена! Теперь вы можете приступить к заполнению вакансий.
-    Для создания новой вакансии напишите команду /create_vacancy'''
-    print(boss_inn)
-    await context.bot.send_message(call.message.chat.id, final_message)
-    return ConversationHandler.END
+    inns = cursor.execute("SELECT inn FROM vacancy").fetchall()[0]
+    id = call.message.chat.id
+    if boss_inn not in inns:
+        cursor.execute('UPDATE vacancy SET inn = ? WHERE user_id = ?', (boss_inn, id))
+        connection.commit()
+        final_message = '''Спасибо, регистрация компании завершена! Теперь вы можете приступить к заполнению вакансий.
+        Для создания новой вакансии напишите команду /create_vacancy'''
+        print(boss_inn)
+        await context.bot.send_message(call.message.chat.id, final_message)
+        return ConversationHandler.END
 
 
 async def create_vacancy(update, context):
@@ -133,18 +168,34 @@ async def vacancy_get_salary(call, context):
 async def worker_get_name(call, context):
     print('ВЫЗВАН ОБРАБОТЧИК ИМЕНИ РАБОТЯГИ')
     worker_name = call.message.text
-    message_phone = 'Укажи номер телефона для связи'
-    print(worker_name)
-    await context.bot.send_message(call.message.chat.id, message_phone)
-    return 10
+    id = call.message.chat.id
+    try:
+        names = cursor.execute("SELECT name FROM workers").fetchall()[0]
+    except Exception as e:
+        names = []
+    if worker_name not in names and ACCESS is True:
+        cursor.execute('UPDATE workers SET name = ? WHERE user_id = ?', (worker_name, id))
+        connection.commit()
+        message_phone = 'Укажи номер телефона для связи'
+        print(worker_name)
+        await context.bot.send_message(call.message.chat.id, message_phone)
+        return 10
 
 
 async def worker_get_phone(call, context):
     print('ОБРАБОТЧИК ТЕЛЕФОНА ВЫЗВАН')
     worker_phone = call.message.text
-    message_final = 'Добро пожалавать в нашу систему!'
-    await context.bot.send_message(call.message.chat.id, message_final)
-    return ConversationHandler.END
+    id = call.message.chat.id
+    try:
+        phones = cursor.execute("SELECT phone FROM workers").fetchall()[0]
+    except Exception as e:
+        phones = []
+    if worker_phone not in phones:
+        cursor.execute('UPDATE workers SET name = ? WHERE user_id = ?', (worker_phone, id))
+        connection.commit()
+        message_final = 'Добро пожалавать в нашу систему!'
+        await context.bot.send_message(call.message.chat.id, message_final)
+        return ConversationHandler.END
 
 
 async def stop_dialog(update, context):
