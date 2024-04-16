@@ -25,7 +25,8 @@ async def start_command(update, context):
     await update.message.reply_text(reply_txt)
     print('in start')
 
-async def begin_command(update, context): # команда входа в диалог с определением кем является пользователь
+
+async def begin_command(update, context):  # команда входа в диалог с определением кем является пользователь
     callback_button1 = InlineKeyboardButton(text="Работадатель", callback_data="leader")
     callback_button2 = InlineKeyboardButton(text="Работяга", callback_data="worker")
     keyboard = InlineKeyboardMarkup([[callback_button1], [callback_button2]])
@@ -33,17 +34,117 @@ async def begin_command(update, context): # команда входа в диа�
     await context.bot.send_message(update.message.chat.id, message, reply_markup=keyboard)
     return 1
 
-async def start_quiz(call, context): # обработка ответа на вопрос, кем является пользователь
+
+async def start_quiz(call, context):  # обработка ответа на вопрос, кем является пользователь
     ans = call.callback_query.data
     print(ans)
     if ans == 'leader':
         print('amogus')
-        message = 'Ты работадатель!'
-        await context.bot.send_message(call.callback_query.message.chat.id, message)
+        lead_message = '''Давай зарегестрируем твою компанию!
+            Введи сначала название компании'''
+        await context.bot.send_message(call.callback_query.message.chat.id, lead_message)
+
     elif ans == 'worker':
-        message = 'Ты работяга!'
-        await context.bot.send_message(call.callback_query.message.chat.id, message)
-    return 0
+        work_message = 'Напиши свое ФИО'
+        await context.bot.send_message(call.callback_query.message.chat.id, work_message)
+
+
+async def boss_get_company(call, context):
+    print('-------------------------------------')
+    company_name = call.message.text
+    print(company_name)
+    message = '''Напиши своё ФИО'''
+    await context.bot.send_message(call.message.chat.id, message)
+    print('ВОЗВРАЩАЮ 3')
+    return 3
+
+
+async def boss_get_name(call, context):
+    print('ОБРАБОТЧИК ИМЕНИ ВЫЗВАН')
+    name = call.message.text
+    message = 'Напиши город, в котором располагается компания'
+    print(name)
+    await context.bot.send_message(call.message.chat.id, message)
+    return 4
+
+
+async def boss_get_city(call, context):
+    print('ОБРАБОТЧИК ГОРОДА ВЫЗВАН')
+    boss_city = call.message.text
+    message = 'Напиши свой ИНН'
+    print(boss_city)
+    await context.bot.send_message(call.message.chat.id, message)
+    return 5
+
+
+async def boss_get_inn(call, context):
+    print('ОБРАБОТЧИК ИНН ВЫЗВАН')
+    boss_inn = call.message.text
+    final_message = '''Спасибо, регистрация компании завершена! Теперь вы можете приступить к заполнению вакансий.
+    Для создания новой вакансии напишите команду /create_vacancy'''
+    print(boss_inn)
+    await context.bot.send_message(call.message.chat.id, final_message)
+    return ConversationHandler.END
+
+
+async def create_vacancy(update, context):
+    print('ОБРАБОТЧИК СОЗДАНИЯ ВАКАНСИЙ ВЫЗВАН')
+    message_place = 'На какую должность нужен работник?'
+    await context.bot.send_message(update.message.chat.id, message_place)
+    return 6
+
+
+async def vacancy_get_place(call, context):
+    print('ОБРАБОТЧИК ДОЛЖНОСТИ ВЫЗВАН')
+    vacancy_place = call.message.text
+    message_skills = 'Какие навыки необходимы будущему работнику? Напишите их через запятую)'
+    print(vacancy_place)
+    await context.bot.send_message(call.message.chat.id, message_skills)
+    return 7
+
+
+async def vacancy_get_skills(call, context):
+    print('ОБРАБОТЧИК НАВЫКОВ ВЫЗВАН')
+    vacancy_skills = call.message.text.split(', ')
+    message_exp = 'Какой опыт работы должен быть у сотрудника?'
+    print(vacancy_skills)
+    await context.bot.send_message(call.message.chat.id, message_exp)
+    return 8
+
+
+async def vacancy_get_exp(call, context):
+    print('ОБРАБОТЧИК ОПЫТА ВЫЗВАН')
+    vacancy_exp = call.message.text
+    message_salary = 'На какую зарплату может рассчитывать сотрудник?'
+    print(vacancy_exp)
+    await context.bot.send_message(call.message.chat.id, message_salary)
+    return 9
+
+
+async def vacancy_get_salary(call, context):
+    print('ОБРАБОТЧИК ЗАРПЛАТЫ ВЫЗВАН')
+    vacancy_salary = call.message.text
+    message_final = 'Спасибо, процедура создания вакансии заверршена. Она внесена в общую базу вакансий твоей компании'
+    print(vacancy_salary)
+    await context.bot.send_message(call.message.chat.id, message_final)
+    return ConversationHandler.END
+
+
+async def worker_get_name(call, context):
+    print('ВЫЗВАН ОБРАБОТЧИК ИМЕНИ РАБОТЯГИ')
+    worker_name = call.message.text
+    message_phone = 'Укажи номер телефона для связи'
+    print(worker_name)
+    await context.bot.send_message(call.message.chat.id, message_phone)
+    return 10
+
+
+async def worker_get_phone(call, context):
+    print('ОБРАБОТЧИК ТЕЛЕФОНА ВЫЗВАН')
+    worker_phone = call.message.text
+    message_final = 'Добро пожалавать в нашу систему!'
+    await context.bot.send_message(call.message.chat.id, message_final)
+    return ConversationHandler.END
 
 
 async def stop_dialog(update, context):
@@ -63,9 +164,38 @@ def main():
         fallbacks=[CommandHandler('stop', stop_dialog)]
 
     )
+    conv_worker_handler = ConversationHandler(
+        entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, worker_get_name)],
+        states={
+            10: [MessageHandler(filters.TEXT, worker_get_phone)]
+        },
+        fallbacks=[CommandHandler('stop', stop_dialog)]
+    )
+    conv_leader_handler = ConversationHandler(
+        entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, boss_get_company)],
+        states={
+            3: [MessageHandler(filters.TEXT, boss_get_name)],
+            4: [MessageHandler(filters.TEXT, boss_get_city)],
+            5: [MessageHandler(filters.TEXT, boss_get_inn)]
+        },
+        fallbacks=[CommandHandler('stop', stop_dialog)]
+    )
+    create_vacancy_handler = ConversationHandler(
+        entry_points=[CommandHandler('create_vacancy', create_vacancy)],
+        states={
+            6: [MessageHandler(filters.TEXT, vacancy_get_place)],
+            7: [MessageHandler(filters.TEXT, vacancy_get_skills)],
+            8: [MessageHandler(filters.TEXT, vacancy_get_exp)],
+            9: [MessageHandler(filters.TEXT, vacancy_get_salary)],
+
+        },
+        fallbacks=[CommandHandler('stop', stop_dialog)]
+    )
     application.add_handler(CommandHandler("start", start_command))
-    #application.add_handler(CommandHandler("cu_the_best", begin_command))
     application.add_handler(conv_handler_start)
+    application.add_handler(conv_leader_handler)
+    application.add_handler(create_vacancy_handler, group=1)
+    application.add_handler(conv_worker_handler, group=2)
     application.run_polling()
 
 
