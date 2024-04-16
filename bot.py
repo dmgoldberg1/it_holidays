@@ -2,22 +2,30 @@ import datetime
 import logging
 import os
 import sqlite3
+
 import time
 from io import StringIO
-
+from model import get_gpt_questions, get_mark_gpt
 # import aiohttp
 # import requests
 
 from telegram import ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, MessageHandler, filters
 from telegram.ext import CommandHandler, CallbackQueryHandler, ConversationHandler
+import random
+yandex_cloud_catalog = "b1glihj9h7pkj7mnd6at"
+yandex_api_key = "AQVNyJRotHlHIhGec5YfWrslmo8tsbsc8eatOf_V"
+temperature = 0.6
+yandex_gpt_model = "yandexgpt"
 
 # Запускаем логгирование
-#logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.DEBUG)
+# logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.DEBUG)
 BOT_TOKEN = '6937834872:AAFajRx8Fpk1U0QHGaH3QmroPsXdUb0qvig'
 connection = sqlite3.connect('vacancy.db')
 cursor = connection.cursor()
 ACCESS = False
+ANSWER_ACCESS = False
+
 
 async def start_command(update, context):
     reply_txt = '''Здравствуй, пользователь! Отправь мне команду
@@ -43,19 +51,22 @@ async def start_quiz(call, context):  # обработка ответа на в�
     id = call.callback_query.from_user.id
     try:
         ids = cursor.execute("SELECT user_id FROM vacancy").fetchall()[0]
+        ids_workers = cursor.execute("SELECT user_id FROM workers").fetchall()[0]
     except Exception as e:
         ids = []
+        ids_workers = []
     if ans == 'leader':
         print('amogus')
         lead_message = '''Давай зарегестрируем твою компанию!
-            Введи сначала название компании'''
+    Введи сначала название компании'''
         if id not in ids:
             cursor.execute('INSERT INTO vacancy (user_id, state) VALUES (?, ?)', (id, 1))
             connection.commit()
             await context.bot.send_message(call.callback_query.message.chat.id, lead_message)
 
     elif ans == 'worker':
-        if id not in ids:
+        if id not in ids_workers:
+            global ACCESS
             ACCESS = True
             work_message = 'Напиши свое ФИО'
             cursor.execute('INSERT INTO workers (user_id) VALUES (?)', (id,))
@@ -67,9 +78,13 @@ async def boss_get_company(call, context):
     print('-------------------------------------')
     company_name = call.message.text
     companies = cursor.execute("SELECT company_name FROM vacancy").fetchall()[0]
+    print(companies)
     id = call.message.chat.id
-    local_company = cursor.execute('SELECT company_name FROM vacancy WHERE user_id=?', (id)).fetchall()[0]
-    if company_name not in companies:
+    # try:
+    local_company = cursor.execute('SELECT company_name FROM vacancy WHERE user_id = ?', (id,)).fetchall()[0]
+    # except:
+    #     local_company = [None]
+    if company_name not in companies and local_company[0] is None:
         cursor.execute('UPDATE vacancy SET company_name = ? WHERE user_id = ?', (company_name, id))
         connection.commit()
         print(company_name)
@@ -159,7 +174,20 @@ async def vacancy_get_exp(call, context):
 async def vacancy_get_salary(call, context):
     print('ОБРАБОТЧИК ЗАРПЛАТЫ ВЫЗВАН')
     vacancy_salary = call.message.text
-    message_final = 'Спасибо, процедура создания вакансии заверршена. Она внесена в общую базу вакансий твоей компании'
+    place = 'python-разработчик'
+    skills = 'python, SQL'
+    id = call.message.chat.id
+    exp = 1
+    salary = 80000
+    message_final = 'Спасибо, процедура создания вакансии завершена. Она внесена в общую базу вакансий твоей компании'
+    cursor.execute('UPDATE vacancy SET place = ? WHERE user_id = ?', (place, id))
+    connection.commit()
+    cursor.execute('UPDATE vacancy SET salary = ? WHERE user_id = ?', (salary, id))
+    connection.commit()
+    cursor.execute('UPDATE vacancy SET skills = ? WHERE user_id = ?', (skills, id))
+    connection.commit()
+    cursor.execute('UPDATE vacancy SET exp = ? WHERE user_id = ?', (exp, id))
+    connection.commit()
     print(vacancy_salary)
     await context.bot.send_message(call.message.chat.id, message_final)
     return ConversationHandler.END
@@ -168,6 +196,7 @@ async def vacancy_get_salary(call, context):
 async def worker_get_name(call, context):
     print('ВЫЗВАН ОБРАБОТЧИК ИМЕНИ РАБОТЯГИ')
     worker_name = call.message.text
+    global ACCESS
     id = call.message.chat.id
     try:
         names = cursor.execute("SELECT name FROM workers").fetchall()[0]
@@ -179,11 +208,13 @@ async def worker_get_name(call, context):
         message_phone = 'Укажи номер телефона для связи'
         print(worker_name)
         await context.bot.send_message(call.message.chat.id, message_phone)
+        ACCESS = False
         return 10
 
 
 async def worker_get_phone(call, context):
     print('ОБРАБОТЧИК ТЕЛЕФОНА ВЫЗВАН')
+    global ANSWER_ACCESS
     worker_phone = call.message.text
     id = call.message.chat.id
     try:
@@ -191,11 +222,28 @@ async def worker_get_phone(call, context):
     except Exception as e:
         phones = []
     if worker_phone not in phones:
-        cursor.execute('UPDATE workers SET name = ? WHERE user_id = ?', (worker_phone, id))
+        cursor.execute('UPDATE workers SET phone = ? WHERE user_id = ?', (worker_phone, id))
         connection.commit()
-        message_final = 'Добро пожалавать в нашу систему!'
+        message_final = '''Добро пожалавать в нашу систему! Для начала нужно пройти тестирование на soft-скиллы.
+        Ниже будут представлены вопросы. Направь ответы на них следующим сообщением в формате - номер вопроса, затем ответ'''
+        global question
         await context.bot.send_message(call.message.chat.id, message_final)
+        question = get_gpt_questions()
+        await context.bot.send_message(call.message.chat.id, question)
+        await context.bot.send_message(call.message.chat.id, str(random.randint(1, 6)))
+        ANSWER_ACCESS = True
         return ConversationHandler.END
+
+
+async def get_test_answer(call, context):
+    global ANSWER_ACCESS
+    global question
+    if ANSWER_ACCESS is True:
+        answer = call.message.text
+        message = f'Твоя оценка за тестирование: {get_mark_gpt(answer, question)}'
+
+        await context.bot.send_message(call.message.chat.id, message)
+        ANSWER_ACCESS = False
 
 
 async def stop_dialog(update, context):
@@ -203,7 +251,9 @@ async def stop_dialog(update, context):
 
 
 def main():
+    global ANSWER_ACCESS
     application = Application.builder().token(BOT_TOKEN).build()
+    test_handler = MessageHandler(filters.TEXT,get_test_answer)
 
     conv_handler_start = ConversationHandler(
         entry_points=[CommandHandler('cu_the_best', begin_command)],
@@ -223,7 +273,7 @@ def main():
         fallbacks=[CommandHandler('stop', stop_dialog)]
     )
     conv_leader_handler = ConversationHandler(
-        entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, boss_get_company)],
+        entry_points=[MessageHandler(filters.TEXT, boss_get_company)],
         states={
             3: [MessageHandler(filters.TEXT, boss_get_name)],
             4: [MessageHandler(filters.TEXT, boss_get_city)],
@@ -244,9 +294,11 @@ def main():
     )
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(conv_handler_start)
-    application.add_handler(conv_leader_handler)
+    application.add_handler(conv_leader_handler, group=0)
     application.add_handler(create_vacancy_handler, group=1)
     application.add_handler(conv_worker_handler, group=2)
+    if ANSWER_ACCESS:
+        application.add_handler(test_handler, group=3)
     application.run_polling()
 
 
