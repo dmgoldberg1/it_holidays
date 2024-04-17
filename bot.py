@@ -13,14 +13,14 @@ from telegram import ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardBu
 from telegram.ext import Application, MessageHandler, filters
 from telegram.ext import CommandHandler, CallbackQueryHandler, ConversationHandler
 import random
-yandex_cloud_catalog = "b1glihj9h7pkj7mnd6at"
-yandex_api_key = "AQVNyJRotHlHIhGec5YfWrslmo8tsbsc8eatOf_V"
+yandex_cloud_catalog = ""
+yandex_api_key = ""
 temperature = 0.6
 yandex_gpt_model = "yandexgpt"
 
 # Запускаем логгирование
 # logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.DEBUG)
-BOT_TOKEN = '6937834872:AAFajRx8Fpk1U0QHGaH3QmroPsXdUb0qvig'
+BOT_TOKEN = ''
 connection = sqlite3.connect('vacancy.db')
 cursor = connection.cursor()
 ACCESS = False
